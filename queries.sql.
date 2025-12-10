@@ -1,0 +1,146 @@
+/* -----------------------------------------------------------
+   1. Топ-10 продавцов по суммарному доходу
+   Считает количество продаж и общую выручку каждого продавца.
+   Затем сортирует продавцов по доходу и выводит топ-10.
+----------------------------------------------------------- */
+SELECT
+    e.first_name || ' ' || e.last_name AS seller,
+    COUNT(s.sales_id) AS operations,
+    FLOOR(SUM(s.quantity * p.price)) AS income
+FROM employees e
+JOIN sales s ON s.sales_person_id = e.employee_id
+JOIN products p ON p.product_id = s.product_id
+GROUP BY e.employee_id, e.first_name, e.last_name
+ORDER BY income DESC
+LIMIT 10;
+
+
+/* -----------------------------------------------------------
+   2. Продавцы, чей средний доход ниже среднего по всем продавцам
+   seller_stats — средний доход каждого продавца.
+   overall_avg — средний доход по всей компании.
+   В итоговый запрос выводятся только продавцы ниже среднего.
+----------------------------------------------------------- */
+WITH seller_stats AS (
+    SELECT
+        e.employee_id,
+        e.first_name || ' ' || e.last_name AS seller,
+        FLOOR(AVG(s.quantity * p.price)) AS avg_income_seller
+    FROM employees e
+    JOIN sales s ON s.sales_person_id = e.employee_id
+    JOIN products p ON p.product_id = s.product_id
+    GROUP BY e.employee_id, e.first_name, e.last_name
+),
+overall_avg AS (
+    SELECT FLOOR(AVG(avg_income_seller)) AS avg_income_all
+    FROM seller_stats
+)
+SELECT
+    ss.seller,
+    ss.avg_income_seller AS average_income
+FROM seller_stats ss
+CROSS JOIN overall_avg oa
+WHERE ss.avg_income_seller < oa.avg_income_all
+ORDER BY average_income ASC;
+
+
+/* -----------------------------------------------------------
+   3. Доход продавцов по дням недели
+   Показывает доход каждого продавца по каждому дню недели.
+   Используется формат 'FMDay', чтобы убрать лишние пробелы.
+----------------------------------------------------------- */
+SELECT
+    e.first_name || ' ' || e.last_name AS seller,
+    LOWER(TO_CHAR(s.sale_date, 'FMDay')) AS day_of_week,
+    FLOOR(SUM(s.quantity * p.price)) AS income
+FROM employees e
+JOIN sales s ON s.sales_person_id = e.employee_id
+JOIN products p ON p.product_id = s.product_id
+GROUP BY
+    e.employee_id,
+    e.first_name,
+    e.last_name,
+    TO_CHAR(s.sale_date, 'D'),
+    TO_CHAR(s.sale_date, 'FMDay')
+ORDER BY
+    TO_CHAR(s.sale_date, 'D'),
+    seller;
+
+
+/* -----------------------------------------------------------
+   4. Распределение клиентов по возрастным категориям
+   Создаются 3 группы: 16–25, 26–40, 40+
+   Затем считается количество клиентов в каждой группе.
+----------------------------------------------------------- */
+WITH age_groups AS (
+    SELECT
+        CASE
+            WHEN age BETWEEN 16 AND 25 THEN '16-25'
+            WHEN age BETWEEN 26 AND 40 THEN '26-40'
+            ELSE '40+'
+        END AS age_category
+    FROM customers
+)
+SELECT
+    age_category,
+    COUNT(*) AS age_count
+FROM age_groups
+GROUP BY age_category
+ORDER BY 
+    CASE age_category
+        WHEN '16-25' THEN 1
+        WHEN '26-40' THEN 2
+        WHEN '40+' THEN 3
+    END;
+
+
+/* -----------------------------------------------------------
+   5. Доход и количество уникальных клиентов по месяцам
+   Группирует продажи по YYYY-MM, считает:
+   - количество разных клиентов
+   - общую выручку за месяц
+----------------------------------------------------------- */
+SELECT
+    TO_CHAR(s.sale_date, 'YYYY-MM') AS selling_month,
+    COUNT(DISTINCT s.customer_id) AS total_customers,
+    FLOOR(SUM(s.quantity * p.price)) AS income
+FROM sales s
+JOIN products p ON s.product_id = p.product_id
+GROUP BY selling_month
+ORDER BY selling_month ASC;
+
+
+/* -----------------------------------------------------------
+   6. Первые покупки клиентов с ценой 0
+   first_purchases — находит дату первой покупки каждого клиента.
+   first_purchases_with_price — добавляет продавца и цену товара.
+   Итог: выводим клиентов, чья самая первая покупка была бесплатной.
+----------------------------------------------------------- */
+WITH first_purchases AS (
+    SELECT
+        s.customer_id,
+        MIN(s.sale_date) AS first_purchase_date
+    FROM sales s
+    GROUP BY s.customer_id
+),
+first_purchases_with_price AS (
+    SELECT
+        s.customer_id,
+        s.sale_date,
+        s.sales_person_id,
+        p.price
+    FROM sales s
+    JOIN products p ON s.product_id = p.product_id
+    JOIN first_purchases fp 
+        ON s.customer_id = fp.customer_id 
+       AND s.sale_date = fp.first_purchase_date
+)
+SELECT
+    c.first_name || ' ' || c.last_name AS customer,
+    fpwp.sale_date AS first_purchase_date,
+    e.first_name || ' ' || e.last_name AS seller
+FROM first_purchases_with_price fpwp
+JOIN customers c ON fpwp.customer_id = c.customer_id
+JOIN employees e ON fpwp.sales_person_id = e.employee_id
+WHERE fpwp.price = 0
+ORDER BY fpwp.customer_id;
