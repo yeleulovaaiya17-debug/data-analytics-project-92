@@ -44,58 +44,27 @@ GROUP BY
 ORDER BY
     TO_CHAR(s.sale_date, 'D'),
     seller;
-WITH age_groups AS (
-    SELECT
-        CASE
-            WHEN age BETWEEN 16 AND 25 THEN '16-25'
-            WHEN age BETWEEN 26 AND 40 THEN '26-40'
-            ELSE '40+'
-        END AS age_category
-    FROM customers
-)
-SELECT
-    age_category,
-    COUNT(*) AS age_count
-FROM age_groups
-GROUP BY age_category
-ORDER BY 
-    CASE age_category
-        WHEN '16-25' THEN 1
-        WHEN '26-40' THEN 2
-        WHEN '40+' THEN 3
-    END; 
-SELECT
-    TO_CHAR(s.sale_date, 'YYYY-MM') AS selling_month,
-    COUNT(DISTINCT s.customer_id) AS total_customers,
-    FLOOR(SUM(s.quantity * p.price)) AS income
-FROM sales s
-JOIN products p ON s.product_id = p.product_id
-GROUP BY selling_month
-ORDER BY selling_month ASC;
-
-WITH first_purchases AS (
-    SELECT
-        s.customer_id,
-        MIN(s.sale_date) AS first_purchase_date
-    FROM sales s
-    GROUP BY s.customer_id
-),
-first_purchases_with_price AS (
-    SELECT
-        s.customer_id,
-        s.sale_date,
-        s.sales_person_id,
-        p.price
-    FROM sales s
-    JOIN products p ON s.product_id = p.product_id
-    JOIN first_purchases fp ON s.customer_id = fp.customer_id AND s.sale_date = fp.first_purchase_date
-)
-SELECT
-    CONCAT(c.first_name, ' ', c.last_name) AS customer,
-    fpwp.sale_date,
-    CONCAT(e.first_name, ' ', e.last_name) AS seller
-FROM first_purchases_with_price fpwp
-JOIN customers c ON fpwp.customer_id = c.customer_id
-JOIN employees e ON fpwp.sales_person_id = e.employee_id
-WHERE fpwp.price = 0
-ORDER BY fpwp.customer_id;
+запрос 1
+Объединяет таблицы employees, sales и products, чтобы узнать, кто что продал и за сколько.
+Считает для каждого сотрудника:
+его полное имя (seller),
+количество продаж (operations),
+суммарный доход от продаж (income).
+Группирует данные по сотруднику.
+Сортирует по доходу от большего к меньшему.
+Берёт только топ-10 продавцов по доходу.
+запрос 2
+В первом подзапросе (seller_stats) для каждого сотрудника вычисляет средний доход от одной продажи.
+Во втором подзапросе (overall_avg) считает средний доход по всем продавцам.
+В основном запросе выбирает всех продавцов, чей средний доход ниже среднего по всем.
+Сортирует этих сотрудников по возрастанию среднего дохода.
+То есть этот запрос ищет «слабых» продавцов по среднему доходу.
+запрос 3
+Объединяет таблицы сотрудников, продаж и товаров.
+Для каждого сотрудника и дня недели считает:
+его имя (seller),
+день недели продажи (day_of_week),
+суммарный доход за этот день (income).
+Группирует данные по сотруднику и дню недели.
+Сортирует сначала по дню недели, потом по имени продавца.
+То есть показывает, сколько каждый продавец заработал в каждый день недели.
