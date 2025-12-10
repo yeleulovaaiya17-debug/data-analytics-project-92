@@ -1,0 +1,85 @@
+-- ============================================================
+--  ОТЧЁТ 1
+--  ТОП-10 продавцов по суммарной выручке
+--  Описание:
+--    1 Считаем выручку каждого продавца: quantity * price
+--    2 Округляем итоговую выручку вниз с помощью FLOOR()
+--    3 Считаем количество сделок (operations)
+--    4 Сортируем по доходу по убыванию
+--    5 Ограничиваем результат первыми 10 строками
+-- ============================================================
+
+SELECT
+    CONCAT(e.first_name, ' ', e.last_name) AS seller,
+    COUNT(s.sales_id) AS operations,
+    FLOOR(SUM(s.quantity * p.price)) AS income
+FROM employees e
+JOIN sales s ON s.sales_person_id = e.employee_id
+JOIN products p ON p.product_id = s.product_id
+GROUP BY e.employee_id, e.first_name, e.last_name
+ORDER BY income DESC
+LIMIT 10;
+
+
+
+-- ============================================================
+--  ОТЧЁТ 2
+--  Продавцы, чья средняя выручка за сделку ниже средней по всем продавцам
+--  Описание:
+--    1 Считаем среднюю выручку продавца: AVG(quantity * price)
+--    2 Округляем среднюю вниз через FLOOR()
+--    3 Считаем среднюю по всем продавцам и тоже округляем вниз
+--    4 Выбираем только тех, кто зарабатывает меньше общей средней
+--    5 Сортируем по средней выручке по возрастанию
+-- ============================================================
+
+WITH seller_stats AS (
+    SELECT
+        e.employee_id,
+        CONCAT(e.first_name, ' ', e.last_name) AS seller,
+        FLOOR(AVG(s.quantity * p.price)) AS avg_income_seller
+    FROM employees e
+    JOIN sales s ON s.sales_person_id = e.employee_id
+    JOIN products p ON p.product_id = s.product_id
+    GROUP BY e.employee_id, e.first_name, e.last_name
+),
+overall_avg AS (
+    SELECT FLOOR(AVG(avg_income_seller)) AS avg_income_all
+    FROM seller_stats
+)
+SELECT
+    seller,
+    avg_income_seller AS average_income
+FROM seller_stats, overall_avg
+WHERE avg_income_seller < avg_income_all
+ORDER BY average_income ASC;
+
+
+
+-- ============================================================
+--  ОТЧЁТ 3
+--  Выручка продавцов по дням недели
+--  Описание:
+--    1 Считаем выручку по каждому продавцу в каждый день недели
+--    2 Название дня недели берём из sale_date
+--    3 Приводим название дня к нижнему регистру (monday, tuesday, …)
+--    4 Округляем выручку вниз с помощью FLOOR()
+--    5 Сортируем по номеру дня недели и по имени продавца
+-- ============================================================
+
+SELECT
+    CONCAT(e.first_name, ' ', e.last_name) AS seller,
+    LOWER(TRIM(TO_CHAR(s.sale_date, 'Day'))) AS day_of_week,
+    FLOOR(SUM(s.quantity * p.price)) AS income
+FROM employees e
+JOIN sales s ON s.sales_person_id = e.employee_id
+JOIN products p ON p.product_id = s.product_id
+GROUP BY
+    e.employee_id,
+    e.first_name,
+    e.last_name,
+    TO_CHAR(s.sale_date, 'D'),
+    TO_CHAR(s.sale_date, 'Day')
+ORDER BY
+    TO_CHAR(s.sale_date, 'D'),
+    seller;
